@@ -3,6 +3,8 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+permissions:
+  contents: write
 jobs:
   apk:
     runs-on: ubuntu-latest
@@ -27,10 +29,21 @@ jobs:
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
       - uses: gradle/actions/setup-gradle@v4
         with: { gradle-version: '8.7' }
-      - name: Build
+      - name: Make a test signing key
         working-directory: ${{ env.PROJECT_DIR }}
-        run: gradle assembleDebug --no-daemon
+        run: |
+          keytool -genkeypair -keystore app/release.jks -storepass leekhitest -keypass leekhitest \
+            -alias leekhi -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Leekhi Ai Test"
+      - name: Build release APK
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: gradle assembleRelease --no-daemon
+      - name: Publish the APK as a Release (direct .apk download, no zip)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp "${{ env.PROJECT_DIR }}/app/build/outputs/apk/release/app-release.apk" leekhi-ai-test.apk
+          gh release create "test-${{ github.run_number }}" leekhi-ai-test.apk --title "Test APK ${{ github.run_number }}" --notes "Test build"
       - uses: actions/upload-artifact@v4
         with:
           name: leekhi-ai-test-apk
-          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
+          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/release/app-release.apk

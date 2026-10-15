@@ -1,0 +1,33 @@
+name: Build test APK
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Find the project (repo root, or unpack the zip)
+        run: |
+          if [ -f settings.gradle ]; then echo "PROJECT_DIR=." >> "$GITHUB_ENV"
+          else
+            ZIP=$(ls -1 ./*.zip 2>/dev/null | head -n 1 || true)
+            [ -n "$ZIP" ] || { echo "::error::No settings.gradle and no zip in the repo root."; exit 1; }
+            mkdir -p _project && unzip -q "$ZIP" -d _project
+            F=$(find _project -maxdepth 3 -name settings.gradle | head -n 1)
+            [ -n "$F" ] || { echo "::error::zip has no settings.gradle"; exit 1; }
+            echo "PROJECT_DIR=$(dirname "$F")" >> "$GITHUB_ENV"
+          fi
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: '8.7' }
+      - name: Build
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: gradle assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: leekhi-ai-test-apk
+          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
